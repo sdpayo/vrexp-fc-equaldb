@@ -391,12 +391,26 @@ async function getNextParticipantId() {
 function sendToSheet(payload) {
   if (!ENDPOINT_URL || !ENDPOINT_URL.startsWith('https')) {
     console.warn('ENDPOINT_URL no configurado');
-    return Promise.resolve({status:'no-endpoint'});
+    return Promise.reject(new Error('ENDPOINT_URL no configurado'));
   }
   const form = new URLSearchParams();
   for (const k in payload) if (payload.hasOwnProperty(k) && payload[k] !== undefined && payload[k] !== null) form.append(k, String(payload[k]));
-  return fetch(ENDPOINT_URL, { method:'POST', headers:{ 'Content-Type':'application/x-www-form-urlencoded' }, body: form.toString() })
-    .then(r => r.text().then(txt => { try { return JSON.parse(txt); } catch(e) { return { status:'ok', raw: txt }; } }));
+  
+  return fetch(ENDPOINT_URL, { 
+    method:'POST', 
+    headers:{ 'Content-Type':'application/x-www-form-urlencoded' }, 
+    body: form.toString(),
+    mode: 'no-cors' // Important for Google Apps Script
+  })
+    .then(r => {
+      // Con mode: 'no-cors', no podemos leer la respuesta, pero si no hay error de red, asumimos éxito
+      console.log('Fetch completed for:', payload.trial_index || payload.event_type);
+      return { status: 'ok' };
+    })
+    .catch(e => {
+      console.error('Fetch error:', e);
+      throw e;
+    });
 }
 
 function sendSessionMetadata(pid, seed, blocks) {
