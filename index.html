@@ -54,7 +54,7 @@
 
       <h2>¿En qué consiste?</h2>
       <p>Vas a escuchar <b>pares de sonidos</b> divididos en <b>6 bloques en total</b>:<br>
-      - <b>3 bloques sobre distancia percibida</b>: 36 ensayos cada uno (30 experimentales + 6 de entrenamiento)<br>
+      - <b>3 bloques sobre distancia percibida</b>: 36 ensayos cada uno (24 experimentales + 12 de entrenamiento con retroalimentación)<br>
       - <b>3 bloques sobre intensidad percibida</b>: 12 ensayos cada uno (sin entrenamiento)<br>
       Entre cada bloque habrá un descanso de <b>30 segundos</b>.<br>
       Duración total aproximada: <b>22 minutos</b>.</p>
@@ -234,6 +234,8 @@
         <button id="btnChoiceA" class="choice-button" disabled>A</button>
         <button id="btnChoiceB" class="choice-button" disabled>B</button>
       </div>
+      
+      <div id="feedbackMessage" style="font-size:16px; font-weight:600; margin-top:20px; min-height:30px;"></div>
       
       <p style="font-size:12px; color:#aaa; margin-top:20px;">Escucha con atención y responde según tu percepción.</p>
       <p id="statusLine" class="small"></p>
@@ -430,46 +432,70 @@ function generatePairs(stimuli, blockType = '', blockIndex = 0, blockKind = 'dis
   }
   
   const distances = Object.keys(byDistance).map(Number).sort();
-  console.log(`Block ${blockType}: Available distances: ${distances.join(', ')}`);
+  console.log(`Block ${blockType} (${blockKind}): Available distances: ${distances.join(', ')}`);
   
-  // Generate all unique combinations: (1,2), (1,3), (1,4), (2,3), (2,4), (3,4)
+  // Generate combinations based on block kind
   const baseCombinations = [];
-  for (let i = 0; i < distances.length; i++) {
-    for (let j = i + 1; j < distances.length; j++) {
-      const dist1 = distances[i];
-      const dist2 = distances[j];
-      
-      // Get one stimulus from each distance
-      const stim1 = byDistance[dist1][0];
-      const stim2 = byDistance[dist2][0];
-      
-      if (stim1 && stim2) {
-        baseCombinations.push({
-          dist1: dist1,
-          dist2: dist2,
-          stim1: stim1,
-          stim2: stim2
-        });
+  
+  if (blockKind === 'distance') {
+    // For DISTANCE blocks: generate ALL ordered pairs (12 total)
+    // 1-2, 1-3, 1-4, 2-1, 2-3, 2-4, 3-1, 3-2, 3-4, 4-1, 4-2, 4-3
+    for (let i = 0; i < distances.length; i++) {
+      for (let j = 0; j < distances.length; j++) {
+        if (i === j) continue; // Skip same distance
+        
+        const dist1 = distances[i];
+        const dist2 = distances[j];
+        
+        // Get one stimulus from each distance
+        const stim1 = byDistance[dist1][0];
+        const stim2 = byDistance[dist2][0];
+        
+        if (stim1 && stim2) {
+          baseCombinations.push({
+            dist1: dist1,
+            dist2: dist2,
+            stim1: stim1,
+            stim2: stim2
+          });
+        }
+      }
+    }
+  } else {
+    // For LOUDNESS blocks: generate only unique pairs (6 total)
+    for (let i = 0; i < distances.length; i++) {
+      for (let j = i + 1; j < distances.length; j++) {
+        const dist1 = distances[i];
+        const dist2 = distances[j];
+        
+        // Get one stimulus from each distance
+        const stim1 = byDistance[dist1][0];
+        const stim2 = byDistance[dist2][0];
+        
+        if (stim1 && stim2) {
+          baseCombinations.push({
+            dist1: dist1,
+            dist2: dist2,
+            stim1: stim1,
+            stim2: stim2
+          });
+        }
       }
     }
   }
   
   console.log(`Block ${blockType} (${blockKind}): Generated ${baseCombinations.length} base combinations`);
   
-  // Generate training pairs: only for distance blocks (6 total)
+  // Generate training pairs: only for distance blocks (all combinations as training)
   const trainingPairs = [];
   if (blockKind === 'distance') {
     for (let i = 0; i < baseCombinations.length; i++) {
       const combo = baseCombinations[i];
       
-      // Randomize order (sometimes A is smaller distance, sometimes B is smaller)
-      const flipOrder = Math.random() < 0.5;
-      const stimA = flipOrder ? combo.stim2 : combo.stim1;
-      const stimB = flipOrder ? combo.stim1 : combo.stim2;
-      
+      // For distance blocks: use the order as defined (no randomization in training)
       trainingPairs.push({
-        stimA: stimA,
-        stimB: stimB,
+        stimA: combo.stim1,
+        stimB: combo.stim2,
         id: `train_${blockKind}_${blockType}_${blockIndex}_${i}`,
         training: true,
         blockKind: blockKind
@@ -479,22 +505,40 @@ function generatePairs(stimuli, blockType = '', blockIndex = 0, blockKind = 'dis
   
   // Generate experimental pairs: each combination repeated N times
   const experimentalPairs = [];
-  for (let rep = 0; rep < repetitions; rep++) {
-    for (let i = 0; i < baseCombinations.length; i++) {
-      const combo = baseCombinations[i];
-      
-      // Randomize order for each repetition
-      const flipOrder = Math.random() < 0.5;
-      const stimA = flipOrder ? combo.stim2 : combo.stim1;
-      const stimB = flipOrder ? combo.stim1 : combo.stim2;
-      
-      experimentalPairs.push({
-        stimA: stimA,
-        stimB: stimB,
-        id: `exp_${blockKind}_${blockType}_${blockIndex}_${rep}_${i}`,
-        training: false,
-        blockKind: blockKind
-      });
+  if (blockKind === 'distance') {
+    // For distance blocks: repeat all 12 combinations 2 times (24 experimental trials)
+    for (let rep = 0; rep < 2; rep++) {
+      for (let i = 0; i < baseCombinations.length; i++) {
+        const combo = baseCombinations[i];
+        
+        experimentalPairs.push({
+          stimA: combo.stim1,
+          stimB: combo.stim2,
+          id: `exp_${blockKind}_${blockType}_${blockIndex}_${rep}_${i}`,
+          training: false,
+          blockKind: blockKind
+        });
+      }
+    }
+  } else {
+    // For loudness blocks: repeat each combination N times with randomization
+    for (let rep = 0; rep < repetitions; rep++) {
+      for (let i = 0; i < baseCombinations.length; i++) {
+        const combo = baseCombinations[i];
+        
+        // Randomize order for each repetition
+        const flipOrder = Math.random() < 0.5;
+        const stimA = flipOrder ? combo.stim2 : combo.stim1;
+        const stimB = flipOrder ? combo.stim1 : combo.stim2;
+        
+        experimentalPairs.push({
+          stimA: stimA,
+          stimB: stimB,
+          id: `exp_${blockKind}_${blockType}_${blockIndex}_${rep}_${i}`,
+          training: false,
+          blockKind: blockKind
+        });
+      }
     }
   }
   
@@ -558,8 +602,8 @@ async function loadConditionsAndPrepareBlocks() {
       // Get all stimuli for this block type
       const allStimuli = groups[type];
       
-      // Generate pairs for DISTANCE block (5 repetitions, with training)
-      const allPairs = generatePairs(allStimuli, type, blockIdx, 'distance', 5);
+      // Generate pairs for DISTANCE block (12 training + 24 experimental = 36 total)
+      const allPairs = generatePairs(allStimuli, type, blockIdx, 'distance', 2);
       
       prepared.push({ type, items: allPairs, blockKind: 'distance' });
       console.log(`Distance Block ${type}: ${allPairs.length} total pairs generated`);
@@ -863,17 +907,46 @@ let currentTrial = null;
 document.getElementById('btnChoiceA').addEventListener('click', () => handleChoice('A'));
 document.getElementById('btnChoiceB').addEventListener('click', () => handleChoice('B'));
 
-function handleChoice(choice) {
+async function handleChoice(choice) {
   if (nextLock) { console.warn('Choice ignored (debounce)'); return; }
   if (!currentTrial) { console.warn('No current trial'); return; }
   
   nextLock = true;
-  setTimeout(() => { nextLock = false; }, 350);
   
-  // Store choice and proceed
+  // Store choice
   currentTrial.userChoice = choice;
   currentTrial.rt_ms = Math.round(performance.now() - startTime);
   
+  // Show feedback for training trials
+  const pair = currentBlockItems[withinIndex];
+  if (pair && pair.training) {
+    const distA = extractDistance(pair.stimA.path);
+    const distB = extractDistance(pair.stimB.path);
+    const currentBlockKind = blocks[blockIndex].blockKind;
+    
+    let correct;
+    if (currentBlockKind === 'distance') {
+      correct = (choice === 'A' && distA > distB) || (choice === 'B' && distB > distA);
+    } else {
+      correct = (choice === 'A' && distA < distB) || (choice === 'B' && distB < distA);
+    }
+    
+    // Display feedback
+    const feedbackEl = document.getElementById('feedbackMessage');
+    if (correct) {
+      feedbackEl.textContent = '✓ Correcto';
+      feedbackEl.style.color = '#00ff88';
+    } else {
+      feedbackEl.textContent = '✗ Incorrecto';
+      feedbackEl.style.color = '#ff4444';
+    }
+    
+    // Wait 1.5 seconds before proceeding
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    feedbackEl.textContent = '';
+  }
+  
+  setTimeout(() => { nextLock = false; }, 350);
   nextTrial();
 }
 
@@ -1002,6 +1075,10 @@ async function presentPair() {
   
   const pair = currentBlockItems[withinIndex];
   currentTrial = { pair: pair, userChoice: null, rt_ms: 0 };
+  
+  // Clear feedback message from previous trial
+  const feedbackEl = document.getElementById('feedbackMessage');
+  if (feedbackEl) feedbackEl.textContent = '';
   
   // Update question based on block kind
   const currentBlockKind = blocks[blockIndex].blockKind;
