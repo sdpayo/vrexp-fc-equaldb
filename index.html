@@ -857,7 +857,8 @@ async function playRefOnce() {
       refSource = null;
       document.getElementById('btnVolumeContinue').disabled = false;
     };
-    refSource.start();
+    // Add 2ms delay before starting to avoid clicks/pops at beginning
+    refSource.start(audioCtx.currentTime + 0.002);
     setTimeout(() => { document.getElementById('btnVolumeContinue').disabled = false; }, 3100);
   } catch (e) {
     console.error('Error reproducir referencia', e);
@@ -1127,6 +1128,8 @@ async function presentPair() {
   indicator.classList.add('active');
   
   try {
+    // Add 2ms delay before playing to avoid clicks/pops at beginning
+    await new Promise(resolve => setTimeout(resolve, 2));
     await audioA.play();
     await new Promise(resolve => {
       audioA.onended = resolve;
@@ -1145,6 +1148,8 @@ async function presentPair() {
   indicator.classList.add('active');
   
   try {
+    // Add 2ms delay before playing to avoid clicks/pops at beginning
+    await new Promise(resolve => setTimeout(resolve, 2));
     await audioB.play();
     await new Promise(resolve => {
       audioB.onended = resolve;
