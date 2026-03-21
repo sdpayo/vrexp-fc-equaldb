@@ -61,12 +61,12 @@
 
       <h2>¿Qué tenés que hacer?</h2>
       <p>En cada ensayo escucharás dos sonidos (A y B).<br>
-      <b>Bloques de distancia</b>: elegir cuál de los dos sonidos está <b>MÁS LEJOS</b>.<br>
+      <b>Bloques de distancia</b>: elegir cuál de los dos sonidos está <b>MÁS LEJOS</b>. Cada bloque de distancia comienza con <b>12 estímulos de práctica con retroalimentación</b> para familiarizarte con la tarea.<br>
       <b>Bloques de intensidad</b>: elegir cuál de los dos sonidos se percibe con <b>MAYOR INTENSIDAD</b>.<br>
 
         <h2>Requisitos</h2>
       <ul style="text-align:left; display:inline-block; margin-top: -8px;">
-        <li><b>Usar auriculares.</b></li>
+        <li><b>Usar auriculares con cable.</b> Se recomienda utilizar auriculares circumaurales.</li>
         <li>Ambiente lo más silencioso posible.</li>
         <li>Silenciar notificaciones en tu teléfono (si aplica).</li>
       </ul>
@@ -168,8 +168,7 @@
 
         <label>Conexión
           <div class="row">
-            <label class="option-box"><input type="radio" name="connection" value="Bluetooth" /> Bluetooth</label>
-            <label class="option-box"><input type="radio" name="connection" value="Cable" /> Con cable</label>
+            <label class="option-box"><input type="radio" name="connection" value="Cable" checked /> Con cable</label>
           </div>
         </label>
 
@@ -212,6 +211,10 @@
     </div>
 
     <div id="trialScreen" class="screen hidden">
+      <div id="trainingBadge" class="hidden" style="background:#ff6600; color:#fff; font-size:24px; font-weight:700; padding:12px 24px; border-radius:8px; margin:0 auto 16px auto; text-align:center; max-width:300px; box-shadow:0 4px 8px rgba(255,102,0,0.3);">
+        ⚠️ ENTRENAMIENTO
+      </div>
+      
       <div class="progress-bar">
         <div id="trialProgressFill" class="progress-bar-fill" style="width:0%;"></div>
       </div>
@@ -297,6 +300,7 @@ let blockIndex = 0;
 let withinIndex = -1;
 let currentBlockItems = [];
 let startTime = 0;
+let experimentalTrialCounter = 0; // Contador secuencial de trials experimentales por bloque (excluye entrenamiento)
 
 /* Buffers y sets */
 let blockBuffer = [];
@@ -857,8 +861,7 @@ async function playRefOnce() {
       refSource = null;
       document.getElementById('btnVolumeContinue').disabled = false;
     };
-    // Add 2ms delay before starting to avoid clicks/pops at beginning
-    refSource.start(audioCtx.currentTime + 0.002);
+    refSource.start();
     setTimeout(() => { document.getElementById('btnVolumeContinue').disabled = false; }, 3100);
   } catch (e) {
     console.error('Error reproducir referencia', e);
@@ -880,6 +883,7 @@ document.getElementById('btnVolumeContinue').addEventListener('click', async () 
   // iniciar bloque 1
   blockIndex = 0;
   withinIndex = -1;
+  experimentalTrialCounter = 0; // Resetear contador para primer bloque
   currentBlockItems = blocks[blockIndex] ? blocks[blockIndex].items || [] : [];
   showBlockScreen();
 });
@@ -909,6 +913,7 @@ document.getElementById('btnStartBlock').addEventListener('click', async () => {
   if (conditionsPromise) await conditionsPromise;
   currentBlockItems = blocks[blockIndex] ? blocks[blockIndex].items || [] : [];
   withinIndex = -1;
+  experimentalTrialCounter = 0; // Resetear contador para nuevo bloque
   blockBuffer = []; blockQueuedIds.clear();
   console.log(`--- STARTING BLOCK ${blockIndex+1} items:${currentBlockItems.length} ---`);
   nextTrial();
@@ -995,6 +1000,7 @@ async function nextTrial() {
     
     // no encolar respuestas de training
     if (!prev.training) {
+      experimentalTrialCounter++; // Incrementar contador solo para trials experimentales
       const uniqueId = prev.id;
       if (!blockQueuedIds.has(uniqueId) && !globalSentIds.has(uniqueId)) {
         const distA = extractDistance(prev.stimA.path);
@@ -1025,11 +1031,11 @@ async function nextTrial() {
           condition: blocks[blockIndex].type,
           block_kind: currentBlockKind,
           timestamp: new Date().toISOString(),
-          extra: JSON.stringify({ distA: distA, distB: distB })
+          extra: JSON.stringify({ distA: distA, distB: distB, trial_number: experimentalTrialCounter })
         };
         blockBuffer.push(payload);
         blockQueuedIds.add(uniqueId);
-        console.log('Encolada respuesta para trial:', uniqueId, 'pair:', `${prev.stimA.csvIndex}|${prev.stimB.csvIndex}`, 'correct:', correct, 'kind:', currentBlockKind);
+        console.log('Encolada respuesta para trial:', uniqueId, 'trial_number:', experimentalTrialCounter, 'pair:', `${prev.stimA.csvIndex}|${prev.stimB.csvIndex}`, 'correct:', correct, 'kind:', currentBlockKind);
       } else {
         console.log('Prev already queued or sent, skipping:', uniqueId);
       }
@@ -1063,6 +1069,7 @@ async function nextTrial() {
     } else {
       currentBlockItems = blocks[blockIndex].items || [];
       withinIndex = -1;
+      experimentalTrialCounter = 0; // Resetear contador para nuevo bloque
       blockBuffer = [];
       blockQueuedIds.clear();
       showBlockScreen();
@@ -1090,6 +1097,14 @@ async function presentPair() {
   
   const pair = currentBlockItems[withinIndex];
   currentTrial = { pair: pair, userChoice: null, rt_ms: 0 };
+  
+  // Show/hide training badge
+  const trainingBadge = document.getElementById('trainingBadge');
+  if (pair.training) {
+    trainingBadge.classList.remove('hidden');
+  } else {
+    trainingBadge.classList.add('hidden');
+  }
   
   // Clear feedback message from previous trial
   const feedbackEl = document.getElementById('feedbackMessage');
@@ -1128,8 +1143,6 @@ async function presentPair() {
   indicator.classList.add('active');
   
   try {
-    // Add 2ms delay before playing to avoid clicks/pops at beginning
-    await new Promise(resolve => setTimeout(resolve, 2));
     await audioA.play();
     await new Promise(resolve => {
       audioA.onended = resolve;
@@ -1148,8 +1161,6 @@ async function presentPair() {
   indicator.classList.add('active');
   
   try {
-    // Add 2ms delay before playing to avoid clicks/pops at beginning
-    await new Promise(resolve => setTimeout(resolve, 2));
     await audioB.play();
     await new Promise(resolve => {
       audioB.onended = resolve;
